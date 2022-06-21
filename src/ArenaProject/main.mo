@@ -1,7 +1,10 @@
 import D "mo:base/Debug";
 import N "mo:base/Nat";
 import I "mo:base/Int";
-
+import L "mo:base/List";
+import R "mo:base/Random";
+import B "mo:base/Buffer";
+ 
 actor {
 
   type Tile = (Text, Nat);
@@ -16,44 +19,210 @@ actor {
     return index;
   }; 
 
+  // DOESN'T HANDLE TIES CORRECTLY, SHARED VALUES ARE ASSIGNED IN THEIR LIST ORDER
+  // Could also more generally inherit more data from the Session's getTurnOrder() to reduce redundancy.
+  // Name is misleading, returns an in-place list of what position 
+  func rankNatArray(l : [var Nat], length : Nat) : [var Nat]{
+    let ranks : B.Buffer<Nat> = B.Buffer(0); // Array to be returned
+    // MAGIC NUMBER USED TO SET UP RANKED, PLEASE FIX WHEN YOU CAN
+    let ranked : [var Bool] = [var false, false, false, false, false, false]; // Array tracking which units have already recieved a rank
+
+    // Varriables used to navigate the imported index
+    var count : Nat = 0; 
+    var current : Nat = 0;
+    var storedPos : Nat = 0; 
+    var storedVal : Nat = 0; 
+
+    // While not every rank has been assigned
+    while (count < length) {
+      // look at each index
+      while (current < length){
+      // compare it to the stored val, make sure it's not smaller or already stored
+        if (l[current] > storedVal) {
+          if (ranked[current] == false) {
+            storedVal := l[current];
+            storedPos := current;
+          };
+          current += 1;
+        } else { current += 1; };
+      };
+
+      // Stored which index of the original array should be used for each position
+      ranks.add(storedPos); 
+      ranked[current - 1] := true;
+      
+      // Upkeep and Value resets
+      current := 0;
+      storedVal := 0; 
+      storedPos := 0;
+      count += 1;
+
+    };
+
+    D.print("Nat Array sorted successfully.");
+    return ranks.toVarArray();
+
+  };
+
   type Health = {#alive : Nat; #dead;};
 
-  class Mob(name : Text) {
+  type Attributes = [var Nat];
+  type Stats = [var Nat];
+
+  type AncestryData = (name : Text, description : Text, attributeModifiers : Attributes);
+  type JobData = (name : Text, description : Text, favoredAttribute : Attributes, statModifiers : Stats);
+
+  let human : AncestryData = ("Human", "A versatile species.", [var 0,0,0,0,0,0]); 
+  let elf : AncestryData = ("Elf", "An agile and proud species.", [var 0,2,0,0,0,2]);
+  let dwarf : AncestryData = ("Human", "A hardy and resourceful species.", [var 0,0,2,0,2,0]);
+
+  let knight : JobData = ("Knight", "A brave warrior.", [var 2,0,0,0,0,0], [var 10,5,10,0,0]);
+  let mage : JobData = ("Wizard", "A knowledgeable spellcaster.", [var 0,0,0,2,0,0], [var 6,0,0,15,5]);
+  let rogue : JobData = ("Rogue", "A brave warrior.", [var 0,2,0,0,0,0], [var 8,10,5,0,5]);
+
+  var ancestryIndex : [var AncestryData] = [var human, elf, dwarf];
+  var jobIndex : [var JobData] = [var knight, mage, rogue];
+
+  type ChampionData = (name : Text, description : Text, attributes : Attributes, stats : Stats, ancestry : AncestryData, job : JobData);
+
+  func getAncestryData(ancestryID : Nat) : AncestryData {
+    let ancestryData : AncestryData = ancestryIndex[ancestryID];
+    D.print("Ancestry Data successfully loaded.");
+    return ancestryData;
+  };
+
+  func getJobData(jobID : Nat) : JobData {
+    let jobData : JobData = jobIndex[jobID];
+    D.print("Job Data successfully loaded.");
+    return jobData;
+  };
+
+  func buildChampionAttributes(ancestryAttributes : Attributes, classAttribute : Attributes) : Attributes {
+    let championAttributes : Attributes = [var 0,0,0,0,0,0];
+    var i = 0;
+    while (i <= 5) {
+      let n : Nat = 10 + ancestryAttributes[i] + classAttribute[i];
+      championAttributes[i] := n;
+      i += 1;
+    };
+    D.print("Champion Attributes successfully generated.");
+    return championAttributes;
+  };
+
+  // CAN THIS BE MADE LESS REPETITIVE? SEE ABOUT ITERATION
+  func buildChampionStats(attributes : Attributes, jobStats : Stats) : Stats {
+    let championStats : Stats = [var 0,0,0,0,0];
+    var i = 0;
+    while (i <= 4) {
+      if (i == 0) {championStats[i] := 10 + attributes[2] + jobStats[0]
+      } else if (i == 1) {championStats[i] := 10 + attributes[0] + jobStats[1]
+      } else if (i == 2) {championStats[i] := 10 + attributes[1] + attributes[2] + jobStats[2]
+      } else if (i == 3) {championStats[i] := 10 + attributes[3] + jobStats[3]
+      } else if (i == 4) {championStats[i] := 10 + attributes[4]
+      } else {D.trap("ERROR WHILE ASSEMBLING CHAMPION STATS")};
+      i += 1;
+    };
+    D.print("Champion Stats successfully generated.");
+    return championStats;
+  };
+
+  class Champion(name : Text, description : Text, ancestryID : Nat, jobID : Nat) {
+
+    func buildChampionData() : ChampionData {
+    
+      let ancestryData : AncestryData = getAncestryData(ancestryID);
+      let jobData : JobData = getJobData(jobID);
+      let attributes : Attributes = buildChampionAttributes(ancestryData.2, jobData.2);
+      let stats : Stats = buildChampionStats(attributes, jobData.3);
+
+      let championData : ChampionData = (name, description, attributes, stats, ancestryData, jobData);
+      D.print("Champion Data assembled successfully.");
+      return championData;
+    };
+
+    let championData : ChampionData = buildChampionData();
+
+    public func getChampionData() : ChampionData {
+      D.print("Champion Data delivered successfully.");
+      return championData;
+    };
+
+  };
+
+  type MobData = (name : Text, attributes : Attributes, stats : Stats);
+
+  type MobType = {#champion : ChampionData;};
+
+  class Mob(mobType : MobType) {
   
-    var health : Health = #alive(5);
-    var coords : Coordinate = (0, 0, 0);
-  
+    // REMOVE REDUNDANCY AND STREAMLINE WITH ITERATION ASAP
+    // Constructs MobData type containing Mob's static readable data. 
+    func buildMobData() : MobData {
+      switch (mobType) {
+        case (#champion championData) { 
+          let m : MobData = (championData.0, championData.2, championData.3);
+          D.print("Mob Data assembled successfully.");
+          return m;
+        };
+      };
+    };
+
+    // Sets Mob's Health according to the stats generated in buildMobData()
+    func buildMobHealth() : Health {
+      let h : Health = #alive(mobData.2[0]);
+      D.print("Mob Health generated successfully.");
+      return h;
+    };
+
+    // NEED A BETTER BLOB GENERATION METHOD; PLACEHOLDER BLOB
+    public func generateMobInitiative() : Nat {
+      let i : Nat = mobData.2[1] - 9 + R.rangeFrom(8, "ISTHISABLOB?");
+      D.print("Mob Initiative generated successfully");
+      return i;
+    };
+
+    let mobData : MobData = buildMobData();
+    var mobHealth : Health = buildMobHealth();  
+    var localCoordinates : Coordinate = (0,0,0);
+    let mobInitiative : Nat = generateMobInitiative();
+
+    D.print("Mob fully initialized.");
+
     public func getName() : Text {
-      return name;
+      return mobData.0;
     };
 
     public func getCoords() : Coordinate {
-      return coords;
+      return localCoordinates;
+    };
+
+    public func getInitiative() : Nat {
+      return mobInitiative;
     };
 
     public func setCoords(newCoords : Coordinate) : () {
-      coords := newCoords;
+      localCoordinates := newCoords;
+      D.print("New Coordinates assigned to Mob successfully.");
     };
 
-    public func recieveDamage(damage : Nat) : Health {
-
-      switch health {
+    public func recieveDamage(damage : Nat) : () {
+      switch (mobHealth) {
         case (#alive hp) {
-          let tempHealth : Int = hp;
-          let newHealth = tempHealth - damage;
+          let currentHealth : Int = hp;
+          let newHealth = currentHealth - damage;
           if (newHealth <= 0) {
-            health := #dead;
-          } else { health := #alive(I.abs(newHealth)); };
+            mobHealth := #dead;
+          } else { mobHealth := #alive(I.abs(newHealth)); };
         };
         case (#dead) {
-          D.trap("THAT UNIT IS DEAD");
+          D.trap("ERROR: Target is recorded as dead.");
         };
       };
-
-      return health;
-
     };
+
   };
+
+  type Shape = {#line : (length : Nat);};
 
   func getCoord(coordinate : Coordinate) : Coordinate {
     return coordinate;
@@ -74,7 +243,7 @@ actor {
     sampleLocation, sampleLocation, sampleLocation, sampleLocation, sampleLocation,
     sampleLocation, sampleLocation, sampleLocation, sampleLocation, sampleLocation,
     
-    #empty, #empty, sampleLocation, #empty, #empty,
+    #empty, #empty, #empty, #empty, #empty,
     #empty, #empty, #empty, #empty, #empty,
     #empty, #empty, #empty, #empty, #empty,
     #empty, #empty, #empty, #empty, #empty,
@@ -140,10 +309,10 @@ actor {
 
       var loc : Location = zoneMatrix[currentIndex];
 
-      var mob = Mob("PLACEHOLDER");
+      let mobBuffer : B.Buffer<Mob> = B.Buffer(0);
 
       switch loc {
-        case (#mob m) { mob := m; };
+        case (#mob m) { mobBuffer.add(m); };
         case (#tile t) { D.trap("THAT IS NOT A MOB"); };
         case (#empty) { D.trap("THAT IS NOT A MOB"); };
       };
@@ -151,7 +320,7 @@ actor {
       loc := zoneMatrix[targetIndex];
 
       switch loc {
-        case (#empty) { zoneMatrix[targetIndex] := #mob(mob); zoneMatrix[currentIndex] := #empty; };
+        case (#empty) { zoneMatrix[targetIndex] := #mob(mobBuffer.get(0)); zoneMatrix[currentIndex] := #empty; };
         case (#mob m) { D.trap("INVALID MOVE DESTINATION"); };
         case (#tile t) { D.trap("INVALID MOVE DESTINATION"); };
       };
@@ -170,160 +339,341 @@ actor {
 
   };
 
-  type Team = [var Mob];  
 
   // TEST VERSION - NOTE REDUNDANCIES
-  func setTeam(team : Team, zone : Zone, teamNo : Nat) : () {
-    type PlacementStatus = {#first; #second; #third; #fourth; #done;};
-    var n = true;
-    var count : PlacementStatus = #first;
-    var teamPlacement = 0;
-    if (teamNo == 1) { teamPlacement := 4; };
-    while (n == true) {
-      switch count {
-        case (#first) {
-          let coords : Coordinate = (teamPlacement, 1, 0);
-          zone.setMob(team[0], coords); count := #second;
-          team[0].setCoords(coords);
-        };
-        case (#second) {
-          let coords : Coordinate = (teamPlacement, 1, 1);
-          zone.setMob(team[1], coords); count := #third;
-          team[1].setCoords(coords);
-        };
-        case (#third) {
-          let coords : Coordinate = (teamPlacement, 1, 2);
-          zone.setMob(team[2], coords); count := #fourth;
-          team[2].setCoords(coords);
-        };
-        case (#fourth) {
-          let coords : Coordinate = (teamPlacement, 1, 3);
-          zone.setMob(team[3], coords); count := #done;
-          team[3].setCoords(coords);
-        };
-        case (#done) {
-          D.print("Team placed successfully!");
-          n := false;
-        };
-      };
-    };
-  };
+  
 
   public type Direction = {#north; #south; #east; #west;};
 
-  class TestCommands() {
-    // TEST VERSION - SIMPLIFIED
-    public func move(actingMob : Mob, zone : Zone, dX : Nat, dZ : Nat) : () {
+  func move(actingMob : Mob, zone : Zone, dX : Nat, dZ : Nat) : () {
 
-      let destination : Coordinate = (dX, 1, dZ);
+    let destination : Coordinate = (dX, 1, dZ);
 
-      // check the start location of the mob
-      let startLocation = actingMob.getCoords();
+    // check the start location of the mob
+    let startLocation = actingMob.getCoords();
     
-      let index = getCoordinateIndex(startLocation, 5, 5);
-      let loc = zone.getIndexItem(index);
-      switch loc {
-        case ( #mob m ) { zone.moveMob(startLocation, destination); actingMob.setCoords(destination); };
-        case ( #tile t ) { D.trap("MOB NOT LOCATED AT INTERNAL COORDINATES"); };
-        case ( #empty ) { D.trap("MOB NOT LOCATED AT INTERNAL COORDINATES"); };
-      };
+    let index = getCoordinateIndex(startLocation, 5, 5);
+    zone.debugDisplayIndex(index);
+    let loc = zone.getIndexItem(index);
 
-    };
-
-    // TEST VERSION - SIMPLIFIED
-    public func attack(actingMob : Mob, zone : Zone, targetDirection : Direction, damageAmount : Nat) : () {
-
-      // check the mob's location
-      let mobCoordinate : Coordinate = actingMob.getCoords();
-  
-      // Determine N, S, E, W
-      let north : Coordinate = (mobCoordinate.0, mobCoordinate.1, mobCoordinate.2 + 1);
-      let south : Coordinate = (mobCoordinate.0, mobCoordinate.1, mobCoordinate.2 - 1);
-      let east : Coordinate = (mobCoordinate.0 + 1, mobCoordinate.1, mobCoordinate.2);
-      let west : Coordinate = (mobCoordinate.0 - 1, mobCoordinate.1, mobCoordinate.2);
-
-      // Determine where the mob is aiming
-      var targetCoord : Coordinate = (0, 0, 0);
-      switch targetDirection {
-        case (#north) { targetCoord := north; };
-        case (#south) { targetCoord := south; };
-        case (#east) { targetCoord := east; };
-        case (#west) { targetCoord := west; };
-      }; 
-
-      // Check to see if the target is empty
-      var target = Mob("PLACEHOLDER");
-      
-      let index = getCoordinateIndex(targetCoord, 5, 5);
-      let loc = zone.getIndexItem(index);
-
-      switch loc {
-        case (#mob m) { target := m; };
-        case (#tile t) { D.trap("THAT IS NOT A MOB"); };
-        case (#empty) { D.trap("THAT IS NOT A MOB"); };
-      };
-
-      let h = target.recieveDamage(damageAmount);
-      
-      switch h {
-        case (#dead) { zone.emptyCoord(index); D.print("The target was killed."); };
-        case (#alive hp) { D.print("The target has " # I.toText(hp) # " health remaining.") }
-      };
-
+    switch loc {
+      case ( #mob m ) { zone.moveMob(startLocation, destination); actingMob.setCoords(destination); };
+      case ( #tile t ) { D.trap("MOB NOT LOCATED AT INTERNAL COORDINATES"); };
+      case ( #empty ) { D.trap("MOB NOT LOCATED AT INTERNAL COORDINATES"); };
     };
 
   };
+
+  // TEST VERSION - SIMPLIFIED
+  func attack(actingMob : Mob, zone : Zone, targetDirection : Direction, damageAmount : Nat) : () {
+
+    // check the mob's location
+    let mobCoordinate : Coordinate = actingMob.getCoords();
+    zone.debugDisplayIndex(getCoordinateIndex(mobCoordinate, 5, 5));
+
+    // Determine N, S, E, W
+    let north : Coordinate = (mobCoordinate.0, mobCoordinate.1, mobCoordinate.2 + 1);
+    zone.debugDisplayIndex(getCoordinateIndex(north, 5, 5));
+    let south : Coordinate = (mobCoordinate.0, mobCoordinate.1, mobCoordinate.2 - 1);
+    zone.debugDisplayIndex(getCoordinateIndex(south, 5, 5));
+    let east : Coordinate = (mobCoordinate.0 + 1, mobCoordinate.1, mobCoordinate.2);
+    zone.debugDisplayIndex(getCoordinateIndex(east, 5, 5));
+    let west : Coordinate = (mobCoordinate.0 - 1, mobCoordinate.1, mobCoordinate.2);
+    zone.debugDisplayIndex(getCoordinateIndex(west, 5, 5));
+
+    // Determine where the mob is aiming
+    var targetCoord : Coordinate = (0, 0, 0);
+    switch targetDirection {
+      case (#north) { targetCoord := north; };
+      case (#south) { targetCoord := south; };
+      case (#east) { targetCoord := east; };
+      case (#west) { targetCoord := west; };
+    }; 
+
+    // Check to see if the target is empty
+    let buffer : B.Buffer<Mob> = B.Buffer(0);
+      
+    let index = getCoordinateIndex(targetCoord, 5, 5);
+    let loc = zone.getIndexItem(index);
+
+    switch loc {
+      case (#mob m) { buffer.add(m); };
+      case (#tile t) { D.trap("THAT IS NOT A MOB"); };
+      case (#empty) { D.trap("THAT IS NOT A MOB"); };
+    };
+
+    let target : [Mob] = buffer.toArray();
+    target[0].recieveDamage(damageAmount);
+
+  };
+
+ 
 
   // Test Commands class object
-  let tc = TestCommands();
   
-  // Test function to make TestCommand functions accessible to end users
-  public func userMove(mobNo : Nat, cX : Nat, cZ : Nat) {
-    if (mobNo == 0) { tc.move(mob1A, testZone, cX, cZ); 
-    } else if (mobNo == 1) { tc.move(mob2A, testZone, cX, cZ);
-    } else if (mobNo == 2) { tc.move(mob3A, testZone, cX, cZ);
-    } else if (mobNo == 3) { tc.move(mob4A, testZone, cX, cZ);
-    } else if (mobNo == 4) { tc.move(mob1B, testZone, cX, cZ);
-    } else if (mobNo == 5) { tc.move(mob2B, testZone, cX, cZ);
-    } else if (mobNo == 6) { tc.move(mob3B, testZone, cX, cZ);
-    } else if (mobNo == 7) { tc.move(mob4B, testZone, cX, cZ);};
-    D.print("Mob moved successfully.")
-  };
+  class RoundManager() {
 
-  public func userAttack(mobNo : Nat, direction : Text, damageAmount : Nat) : () {
+    var currentRound = 0;
+
+    // Get Next Mob in Turn order 
+
+    func roundUpkeep() : Nat {
+      // Read current acting Mob
+
+      // Give Action Points (AP)
+      // Take Action
+      // Reduce AP
+      // Check if AP > 0, if NO continue
+      return 0;
+
+    };
+
+  };
+  
+  type SessionData = (turnNumber : Nat);
+  type TeamCount = {#two; #three; #four;};
+
+  class Session(numTeams : TeamCount, mobsPerTeam : Nat, championData : [ChampionData], zoneID : Nat) {
+
+    func buildSessionData() : SessionData {
+      var sessionData : SessionData = (0);
+      D.print("Session Data assembled successfully.");
+      return sessionData;
+    };
+
+    func buildPlayerMobs() : [var Mob] {
+      let n : Nat = 2 * mobsPerTeam; var i : Nat = 0;
+      let mobList : B.Buffer<Mob> = B.Buffer(0);
+      while (i < n) { 
+        let m : Mob = Mob(#champion(championData[i]));
+        mobList.add(m);
+        i += 1; 
+      };
+      let r = mobList.toVarArray();
+      D.print("Mobs assembled from Champion Data successfully.");
+      return r;
+    };
+  
+    // Create Data Structures
+    var sessionData : SessionData = buildSessionData(); // Session data like turn order. Maybe total damage dealt and other metrics?
+    let mobList : [var Mob] = buildPlayerMobs(); //
+
+    // Build teams and bind players to each
+    func createTeam(start : Nat, stop : Nat) : [var Mob] {
+      let team : B.Buffer<Mob> = B.Buffer(0);
+      var i : Nat = start; var j : Nat = 0;
+      while (i < stop){
+        team.add(mobList[i]);
+        i += 1;
+      };
+      let r : [var Mob] = team.toVarArray();
+      D.print("Team successfully assigned from Mob List.");
+      return r;
+    };
     
-    var targetDirection : Direction = #north;
+    // TEMPORARY IMPLEMENT FOR TWO TEAMS; NEEDS AUTOMATING FOR DISTRIBUTION OF UP TO FOUR UNITS
+    // Won't actually be fully functional until we start working with principal IDs...
+    // As it works now, the game assumes that the mobs arrive ordered to be split into two teams (of semi-variable length...)
+    // Technically, they aren't especially versa
+    let teamA : [var Mob] = createTeam(0, mobsPerTeam); 
+    let teamB : [var Mob] = createTeam(mobsPerTeam, mobsPerTeam * 2);
 
-    if (direction == "North") { targetDirection := #north; 
-    } else if (direction == "South") { targetDirection := #south; 
-    } else if (direction == "East") { targetDirection := #east; 
-    } else if (direction == "West") { targetDirection := #west; 
-    } else {D.trap("INVALID DIRECTIONAL INPUT")};
+    // Get Mob Turn Order
+    func getTurnOrder() : [var Mob] {
+      let temp : B.Buffer<Nat> = B.Buffer(0);
+      let n : Nat = 2 * mobsPerTeam; var i : Nat = 0; // NOTE: USES CONSTANT 2 INSTEAD OF READING THE ACTUAL NUMBER OF TEAMS
+      
+      // Record Mob initiatives      
+      while (i < n) { 
+        temp.add(mobList[i].generateMobInitiative()); 
+        i += 1; 
+      };
+      let initiativeList : [var Nat] = temp.toVarArray();
+      D.print("Initiatives recorded successfully");
+      
+      
+      let initialInitiativePosition : [var Nat] = rankNatArray(initiativeList, n);
 
-    if (mobNo == 0) { tc.attack(mob1A, testZone, targetDirection, damageAmount);
-    } else if (mobNo == 1) { tc.attack(mob2A, testZone, targetDirection, damageAmount);
-    } else if (mobNo == 2) { tc.attack(mob3A, testZone, targetDirection, damageAmount);
-    } else if (mobNo == 3) { tc.attack(mob4A, testZone, targetDirection, damageAmount);
-    } else if (mobNo == 4) { tc.attack(mob1B, testZone, targetDirection, damageAmount);
-    } else if (mobNo == 5) { tc.attack(mob2B, testZone, targetDirection, damageAmount);
-    } else if (mobNo == 6) { tc.attack(mob3B, testZone, targetDirection, damageAmount);
-    } else if (mobNo == 7) { tc.attack(mob4B, testZone, targetDirection, damageAmount);};
-    D.print("Mob attacked successfully.")
+      // Rank their initiatives, also build a second list tracking placement on the original list
+      // take first item in list
+      
+      let turnOrder : B.Buffer<Mob> = B.Buffer(0);
+      i := 0; // Reset loop counter
+      while (i < n) {
+        let t = initialInitiativePosition[i];
+        turnOrder.add(mobList[t]);
+        i += 1;
+      };
+       
+      D.print("Turn Order successfully assigned.");
+      return turnOrder.toVarArray();
+    };
+
+    var turnOrder : [var Mob] = getTurnOrder();
+    D.print(turnOrder[3].getName());
+
+    // build zone
+    // Test zone which, by default, initializes our simple test zone
+    // See the Zone class for information on how this functions.
+    // In the future, more complex Zone selection will make use of the Session's passed zoneID param
+    let testZone : Zone = Zone(); 
+
+    func setTeam(team : [var Mob], zone : Zone, teamNo : Nat) : () {
+      type PlacementStatus = {#first; #second; #third; #done;};
+      var n = true;
+      var count : PlacementStatus = #first;
+      var teamPlacement = 1;
+      if (teamNo == 1) { teamPlacement := 3; };
+      while (n == true) {
+        switch count {
+          case (#first) {
+            let coords : Coordinate = (teamPlacement, 1, 1);
+            zone.setMob(team[0], coords); count := #second;
+            team[0].setCoords(coords);
+          };
+          case (#second) {
+            let coords : Coordinate = (teamPlacement, 1, 2);
+            zone.setMob(team[1], coords); count := #third;
+            team[1].setCoords(coords);
+          };
+          case (#third) {
+            let coords : Coordinate = (teamPlacement, 1, 3);
+            zone.setMob(team[2], coords); count := #done;
+            team[2].setCoords(coords);
+          };
+          case (#done) {
+            D.print("Team placed successfully!");
+            n := false;
+          };
+        };
+      };
+    };
+
+    // place mobs
+    // Uses previous build's test function
+    // Assumes both teams use 3 Mobs each
+    // Team num should be taken alongside the number of teams
+    // Would 
+    // Takes TEAM, ZONE, TEAM NUM
+    setTeam(teamA, testZone, 0);
+    setTeam(teamB, testZone, 1);
+
+    // MAGIC NUMBER USED; PRESUPPOSED TOTAL UNIT COUNT IS 6
+    // FIX AFTER HACKATHON DEMO
+    func setActingMob() : Mob {
+      let actingMob : Mob = turnOrder[0];
+      var i : Nat = 1;
+      while (i < 6) {
+        turnOrder[i-1] := turnOrder[i];
+        i += 1;
+      };
+      turnOrder[5] := actingMob;
+      return actingMob;
+    };
+
+    var actingMob = setActingMob();
+    D.print("Current Acting Mob is: " # actingMob.getName());
+
+    // Start Turn 1
+    var actionPoints = 3;
+
+    type ActionType = {#none; #attack; #move;};
+
+    // Switch-readable format for the incoming actionType
+    // Should eventually take a nat that pulls from a sequential index of possible actions
+    // This index can also return a check to see whether a given mob is whitelisted for a certain action
+    func getActionType(actionType : Text) : ActionType {
+        var a : ActionType = #none;
+        if (actionType == "Attack") {
+          a := #attack;
+        } else if (actionType == "Move") {
+          a := #move;
+        };
+        D.print("Action interpreted as type: " # actionType);
+        return a;
+    };
+
+    public func performAction(actionType : Text, dX : Nat, dZ : Nat, targetDirection : Direction) : () {
+      
+
+      // Stores the action being berformed by action
+      var action : ActionType = getActionType(actionType);
+
+
+      func processAction(action : ActionType) : () {
+        // actions
+        switch (action) {
+          case (#none){
+            D.trap("INVALID ACTION REQUEST");
+          };
+          case (#move) {
+            move(actingMob, testZone, dX, dZ);
+            D.print("Mob moved successfully.");
+          };
+          case (#attack) {
+            attack(actingMob, testZone, targetDirection, 5);
+            D.print("Mob attacked successfully");
+          };
+        };
+      };
+
+
+      processAction(action);
+
+      actingMob := setActingMob();
+      D.print("Current Acting Mob is: " # actingMob.getName());
+      
+    };
+    
+
+      // check victory conditions
+
+      // loop until victory conditions are met
+
   };
 
-  // Test mobs. 3 for 'Team A', and 3 for 'Team B'
-  let mob1A = Mob("mob1A"); let mob2A = Mob("mob2A"); let mob3A = Mob("mob3A"); let mob4A = Mob("mob4A");
-  let mob1B = Mob("mob1B"); let mob2B = Mob("mob2B"); let mob3B = Mob("mob3B"); let mob4B = Mob("mob4B");
+/*------------------------------------------------------------------------
+| DEBUG AND TESTING BELOW THIS LINE
+| Data below this header constructs samples of Champion NFTs
+| And instantiates the Session itself
+------------------------------------------------------------------------*/
 
-  // Test mobs sorted into two teams
-  let teamA : Team = [var mob1A, mob2A, mob3A, mob4A];
-  let teamB : Team = [var mob1B, mob2B, mob3B, mob4A];
+  // SAMPLE CODE 
+  // Our band of sample Champions. These are the precursors to Mobs.
+  // These will eventually exist as player-customized NFTs
 
-  // Test zone which, by default, initializes our simple test zone
-  let testZone = Zone(); 
+  // Team A
+  let mercenary : Champion = Champion("Mercenary", "A sellsword.", 0, 0);
+  let wizard : Champion = Champion("Wizard", "An arcane practicioner.", 0, 1);
+  let thief : Champion = Champion("Thief", "A treacherous scoundrel.", 0, 2);
 
-  // Places each team within our testZone
-  // Each should return a 'Team placed successfully' message in the terminal
-  setTeam(teamA, testZone, 0);
-  setTeam(teamB, testZone, 1);
+  // Team B
+  let elfWarrior : Champion = Champion("Elven Warrior", "An elf trained as a knight.", 1, 0);
+  let elfMageA : Champion = Champion("Elven Mage", "An elf trained in the mystic arts.", 1, 1);
+  let elfMageB : Champion = Champion("Elven Mage", "An elf trained in the mystic arts.", 1, 1);
+
+  // Sample assembly of Champion Data, packaged data collected from player NFTs at session initialization (a necessary paramater to )
+  let sampleChampionData: [ChampionData] = [
+    mercenary.getChampionData(), wizard.getChampionData(), thief.getChampionData(), 
+    elfWarrior.getChampionData(), elfMageA.getChampionData(), elfMageB.getChampionData()
+  ];
+
+  // Our sample session! Everything in the game happens here!
+  let sampleSession : Session = Session(#two, 3, sampleChampionData, 0);
+  
+  
+  public func takeAction(action : Text, dX : Nat, dZ : Nat, direction : Text) : () {
+    var temp : Direction = #north;
+    if (direction == "South") {
+      temp := #south;
+    } else if (direction == "East") {
+      temp := #east;
+    } else if (direction == "West") {
+      temp := #west;
+    };
+  
+    sampleSession.performAction(action, dX, dZ, temp);
+  };
+  D.print("TEST");
+
 };
